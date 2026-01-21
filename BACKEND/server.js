@@ -26,7 +26,60 @@ async function connectDatabase() {
   }
 }
 
-app.get("api/transactions:id",)
+app.get("/api/transactions/:userId", async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const transactions =
+      await sql`SELECT * FROM transactions WHERE user_id = ${userId} ORDER BY created_at DESC`;
+    res.status(200).json({ transactions });
+  } catch (error) {
+    console.error("Error getting transactions:", error);
+    res.status(500).json({ message: "Internal server error" });
+  }
+});
+
+app.delete("/api/transactions/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (isNaN(parseInt(id))) {
+      return res.status(400).json({ message: "Invalid transaction ID" });
+    }
+    const result =
+      await sql`DELETE FROM transactions WHERE id = ${id} RETURNING *`;
+
+    if (result.length === 0) {
+      return res.status(404).json({ message: "Transaction not found" });
+    } else {
+      res.status(200).json({ message: "Transaction deleted successfully" });
+    }
+  } catch (error) {
+    console.error("Error deleting transaction:", error);
+    res.status(500).json({ message: "Internal server error" });
+  }
+});
+
+app.get("/api/transactions/summary/:userId", async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const summary =
+      await sql`SELECT COALESCE(SUM(amount), 0) as balance FROM transactions WHERE user_id = ${userId}`;
+
+    const incomeResult =
+      await sql`SELECT COALESCE(SUM(amount), 0) as income FROM transactions WHERE user_id = ${userId} AND amount > 0`;
+
+      const expenseResult =
+      await sql`SELECT COALESCE(SUM(amount), 0) as expense FROM transactions WHERE user_id = ${userId} AND amount < 0`;
+
+      res.status(200).json({
+        balance: summary[0].balance,
+        income: incomeResult[0].income,
+        expense: expenseResult[0].expense,
+      })
+  } catch (error) {
+    console.error("Error fetching summary:", error);
+    res.status(500).json({ message: "Internal server error" });
+  }
+});
 
 app.post("/api/transactions", async (req, res) => {
   // Logic to add a new transaction
@@ -43,12 +96,10 @@ app.post("/api/transactions", async (req, res) => {
       await sql`INSERT INTO transactions (title, amount, category, user_id) 
         VALUES (${title}, ${amount}, ${category}, ${user_id})  RETURNING *;`;
 
-    res
-      .status(201)
-      .json({
-        message: "Transaction added successfully",
-        transaction: transaction[0],
-      });
+    res.status(201).json({
+      message: "Transaction added successfully",
+      transaction: transaction[0],
+    });
   } catch (error) {
     console.error("Error adding transaction:", error);
     res.status(500).json({ message: "Internal server error" });
